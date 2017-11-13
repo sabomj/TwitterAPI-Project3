@@ -49,18 +49,35 @@ api = tweepy.API(auth, parser=tweepy.parsers.JSONParser())
 
 CACHE_FNAME = "206_APIsAndDBs_cache.json"
 # Put the rest of your caching setup here:
-
+try:
+    cache_file = open(CACHE_FNAME,'r')
+    cache_contents = cache_file.read()
+    cache_file.close()
+    CACHE_DICTION = json.loads(cache_contents)
+except:
+    CACHE_DICTION = {}
 
 
 # Define your function get_user_tweets here:
 
-
+def get_user_tweets(tweet):
+    if tweet in CACHE_DICTION:
+        print('getting from cache')
+        res = CACHE_DICTION[x]
+    else:
+        print('fetching')
+        res = api.user_timeline(screen_name = tweet)
+        CACHE_DICTION[tweet] = res
+        f = open(CACHE_FNAME,'w')
+        f.write(json.dumps(CACHE_DICTION))
+        f.close()
+    return res
 
 
 
 # Write an invocation to the function for the "umich" user timeline and
 # save the result in a variable called umich_tweets:
-
+umich_tweets = get_user_tweets("@umich")
 
 
 
@@ -89,8 +106,26 @@ CACHE_FNAME = "206_APIsAndDBs_cache.json"
 ## dictionary -- you don't need to do any manipulation of the Tweet
 ## text to find out which they are! Do some nested data investigation
 ## on a dictionary that represents 1 tweet to see it!
+conn = sqlite3.connect('206_APIsAndDBs.sqlite')
+cur = conn.cursor()
 
 
+cur.execute('DROP TABLE IF EXISTS Tweets')
+cur.execute('CREATE TABLE Tweets (tweet_id TEXT, "text" TEXT, user_posted TEXT, time_posted TIMESTAMP, retweets NUMBER)')
+
+cur.execute('DROP TABLE IF EXISTS Users')
+cur.execute('CREATE TABLE Users (user_id TEXT, screen_name TEXT, num_favs NUMBER, description TEXT)')
+
+
+for tweet in umich_tweets:
+	data = tweet["id"], tweet["text"], tweet["user"]["screen_name"],  tweet["created_at"], tweet["retweet_count"]
+	cur.execute('INSERT INTO Tweets (tweet_id, "text" , user_posted, time_posted, retweets) VALUES (?, ?, ?, ?, ? )', data)
+	try:
+		user_data = tweet["entities"]["user_mentions"][0]["id"], tweet["entities"]["user_mentions"][0]["screen_name"], tweet["user"]["favorite_count"], tweet["entities"]["user_mentions"][0]["name"]
+		cur.execute('INSERT INTO Users (user_id, screen_name , num_favs, description) VALUES (?, ?, ?, ? )', user_data)
+	except:
+		continue
+conn.commit()
 ## Task 3 - Making queries, saving data, fetching data
 
 # All of the following sub-tasks require writing SQL statements
