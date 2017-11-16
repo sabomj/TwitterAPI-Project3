@@ -18,7 +18,7 @@ import twitter_info # same deal as always...
 import json
 import sqlite3
 
-## Your name:
+## Your name: Madeleine Sabo
 ## The names of anyone you worked with on this project:
 
 #####
@@ -63,7 +63,7 @@ except:
 def get_user_tweets(tweet):
     if tweet in CACHE_DICTION:
         print('getting from cache')
-        res = CACHE_DICTION[x]
+        res = CACHE_DICTION[tweet]
     else:
         print('fetching')
         res = api.user_timeline(screen_name = tweet)
@@ -109,23 +109,23 @@ umich_tweets = get_user_tweets("@umich")
 conn = sqlite3.connect('206_APIsAndDBs.sqlite')
 cur = conn.cursor()
 
-
 cur.execute('DROP TABLE IF EXISTS Tweets')
 cur.execute('CREATE TABLE Tweets (tweet_id TEXT, "text" TEXT, user_posted TEXT, time_posted TIMESTAMP, retweets NUMBER)')
 
 cur.execute('DROP TABLE IF EXISTS Users')
 cur.execute('CREATE TABLE Users (user_id TEXT, screen_name TEXT, num_favs NUMBER, description TEXT)')
 
-
 for tweet in umich_tweets:
-	data = tweet["id"], tweet["text"], tweet["user"]["screen_name"],  tweet["created_at"], tweet["retweet_count"]
-	cur.execute('INSERT INTO Tweets (tweet_id, "text" , user_posted, time_posted, retweets) VALUES (?, ?, ?, ?, ? )', data)
-	try:
-		user_data = tweet["entities"]["user_mentions"][0]["id"], tweet["entities"]["user_mentions"][0]["screen_name"], tweet["user"]["favorite_count"], tweet["entities"]["user_mentions"][0]["name"]
-		cur.execute('INSERT INTO Users (user_id, screen_name , num_favs, description) VALUES (?, ?, ?, ? )', user_data)
-	except:
-		continue
+	data = (tweet['id_str'], tweet['text'], tweet['user']['id'], tweet['user']['created_at'], tweet['retweet_count'])
+	cur.execute('INSERT OR IGNORE INTO Tweets Values (?,?,?,?,?)', data)
+
+	for x in tweet['entities']['user_mentions']:
+	 	name = api.get_user(x['screen_name'])
+	 	data = (name['id_str'], name['screen_name'], name['favourites_count'], name['description'])
+	 	cur.execute('INSERT OR IGNORE INTO Users Values (?,?,?,?)', data)
+
 conn.commit()
+
 ## Task 3 - Making queries, saving data, fetching data
 
 # All of the following sub-tasks require writing SQL statements
@@ -134,38 +134,49 @@ conn.commit()
 # Make a query to select all of the records in the Users database.
 # Save the list of tuples in a variable called users_info.
 
-users_info = True
+cur.execute('SELECT * FROM Users')
+users_info = cur.fetchall()
 
 # Make a query to select all of the user screen names from the database.
 # Save a resulting list of strings (NOT tuples, the strings inside them!)
 # in the variable screen_names. HINT: a list comprehension will make
 # this easier to complete!
-screen_names = True
+
+names = ('SELECT screen_name FROM Users')
+lst = []
+for x in cur.execute(names):
+    lst.append(str(x))
+screen_names = lst
 
 
 # Make a query to select all of the tweets (full rows of tweet information)
 # that have been retweeted more than 10 times. Save the result
 # (a list of tuples, or an empty list) in a variable called retweets.
-retweets = True
+
+cur.execute('SELECT * FROM Tweets WHERE retweets > 10')
+retweets = cur.fetchall()
 
 
 # Make a query to select all the descriptions (descriptions only) of
 # the users who have favorited more than 500 tweets. Access all those
 # strings, and save them in a variable called favorites,
 # which should ultimately be a list of strings.
+cur.execute('SELECT description FROM Users WHERE num_favs > 500')
 favorites = True
 
 
 # Make a query using an INNER JOIN to get a list of tuples with 2
 # elements in each tuple: the user screenname and the text of the
 # tweet. Save the resulting list of tuples in a variable called joined_data2.
+
+cur.execute('SELECT Users.screen_name, Tweets.text FROM Users INNER JOIN Tweets ON Users.user_id = Tweets.user_posted')
 joined_data = True
 
 # Make a query using an INNER JOIN to get a list of tuples with 2
 # elements in each tuple: the user screenname and the text of the
 # tweet in descending order based on retweets. Save the resulting
 # list of tuples in a variable called joined_data2.
-
+cur.execute("SELECT Users.screen_name, Tweets.text FROM Users INNER JOIN Tweets ON Users.user_id = Tweets.user_posted ORDER BY Tweets.retweets")
 joined_data2 = True
 
 
@@ -173,6 +184,8 @@ joined_data2 = True
 ### OF THE FILE HERE SO YOU DO NOT LOCK YOUR DATABASE (it's fixable,
 ### but it's a pain). ###
 
+conn.commit()
+cur.close()
 ###### TESTS APPEAR BELOW THIS LINE ######
 ###### Note that the tests are necessary to pass, but not sufficient --
 ###### must make sure you've followed the instructions accurately!
