@@ -14,7 +14,7 @@ import unittest
 import itertools
 import collections
 import tweepy
-import twitter_info # same deal as always...
+import twitter_info
 import json
 import sqlite3
 
@@ -60,14 +60,14 @@ except:
 
 # Define your function get_user_tweets here:
 
-def get_user_tweets(tweet):
-    if tweet in CACHE_DICTION:
+def get_user_tweets(user):
+    if user in CACHE_DICTION:
         print('getting from cache')
-        res = CACHE_DICTION[tweet]
+        return CACHE_DICTION[user]
     else:
         print('fetching')
-        res = api.user_timeline(screen_name = tweet)
-        CACHE_DICTION[tweet] = res
+        res = api.user_timeline(id= user)
+        CACHE_DICTION[user] = res
         f = open(CACHE_FNAME,'w')
         f.write(json.dumps(CACHE_DICTION))
         f.close()
@@ -77,7 +77,7 @@ def get_user_tweets(tweet):
 
 # Write an invocation to the function for the "umich" user timeline and
 # save the result in a variable called umich_tweets:
-umich_tweets = get_user_tweets("@umich")
+umich_tweets = get_user_tweets("@UMich")
 
 
 
@@ -109,20 +109,24 @@ umich_tweets = get_user_tweets("@umich")
 conn = sqlite3.connect('206_APIsAndDBs.sqlite')
 cur = conn.cursor()
 
-cur.execute('DROP TABLE IF EXISTS Tweets')
-cur.execute('CREATE TABLE Tweets (tweet_id TEXT, "text" TEXT, user_posted TEXT, time_posted TIMESTAMP, retweets NUMBER)')
-
 cur.execute('DROP TABLE IF EXISTS Users')
-cur.execute('CREATE TABLE Users (user_id TEXT, screen_name TEXT, num_favs NUMBER, description TEXT)')
+cur.execute('CREATE TABLE Users (user_id TEXT PRIMARY KEY, screen_name TEXT, num_favs INTEGER, description TEXT)')
+
+cur.execute('DROP TABLE IF EXISTS Tweets')
+cur.execute('CREATE TABLE Tweets (tweet_id TEXT PRIMARY KEY, tweet_text TEXT, user_posted TEXT, time_posted DATETIME, retweets INTEGER,FOREIGN KEY (user_posted) REFERENCES Users(user_id))')
+
+for user in umich_tweets:
+    data = (user['user']['id'], user['user']['screen_name'], user['user']['favourites_count'], user['user']['description'])
+    cur.execute('INSERT or IGNORE INTO Users VALUES (?,?,?,?)', data)
+
+    for items in user['entities']['user_mentions']:
+        user = api.get_user(items['screen_name'])
+        data = (user['id_str'], user['screen_name'], user['favourites_count'], user['description'])
+        cur.execute('INSERT OR IGNORE INTO Users VALUES (?,?,?,?)', data)
 
 for tweet in umich_tweets:
-	data = (tweet['id_str'], tweet['text'], tweet['user']['id'], tweet['user']['created_at'], tweet['retweet_count'])
-	cur.execute('INSERT OR IGNORE INTO Tweets Values (?,?,?,?,?)', data)
-
-	for x in tweet['entities']['user_mentions']:
-	 	name = api.get_user(x['screen_name'])
-	 	data = (name['id_str'], name['screen_name'], name['favourites_count'], name['description'])
-	 	cur.execute('INSERT OR IGNORE INTO Users Values (?,?,?,?)', data)
+	data2 = (tweet['id_str'], tweet['text'], tweet['user']['id'], tweet['created_at'], tweet['retweet_count'])
+	cur.execute('INSERT OR IGNORE INTO Tweets VALUES (?,?,?,?,?)', data2)
 
 conn.commit()
 
@@ -133,20 +137,22 @@ conn.commit()
 
 # Make a query to select all of the records in the Users database.
 # Save the list of tuples in a variable called users_info.
-
+users_info = []
 cur.execute('SELECT * FROM Users')
-users_info = cur.fetchall()
+fetch = cur.fetchall()
+for x in fetch:
+    users_info.append(tuple(x))
 
 # Make a query to select all of the user screen names from the database.
 # Save a resulting list of strings (NOT tuples, the strings inside them!)
 # in the variable screen_names. HINT: a list comprehension will make
 # this easier to complete!
 
-names = ('SELECT screen_name FROM Users')
-lst = []
-for x in cur.execute(names):
-    lst.append(str(x))
-screen_names = lst
+screen_names = []
+cur.execute('SELECT screen_name FROM Users')
+fetch = cur.fetchall()
+for x in fetch:
+    screen_names.append(str(x))
 
 
 # Make a query to select all of the tweets (full rows of tweet information)
@@ -156,28 +162,37 @@ screen_names = lst
 cur.execute('SELECT * FROM Tweets WHERE retweets > 10')
 retweets = cur.fetchall()
 
-
 # Make a query to select all the descriptions (descriptions only) of
 # the users who have favorited more than 500 tweets. Access all those
 # strings, and save them in a variable called favorites,
 # which should ultimately be a list of strings.
-cur.execute('SELECT description FROM Users WHERE num_favs > 500')
-favorites = True
 
+
+ #list of descriptions (strings) from users who have favorited more than 500 tweets
+
+cur.execute('SELECT description FROM Users where num_favs > 500') #selects the column that contains "description" from table users that have favorited over 500 tweets
+fav = cur.fetchall()
+favorites = []
+for x in fav:
+    favorites.append(x[0])
 
 # Make a query using an INNER JOIN to get a list of tuples with 2
 # elements in each tuple: the user screenname and the text of the
 # tweet. Save the resulting list of tuples in a variable called joined_data2.
 
-cur.execute('SELECT Users.screen_name, Tweets.text FROM Users INNER JOIN Tweets ON Users.user_id = Tweets.user_posted')
-joined_data = True
+
+cur.execute('SELECT screen_name, "text" FROM Tweets INNER JOIN Users on user_posted = user_id')
+joined_data = cur.fetchall()
+
 
 # Make a query using an INNER JOIN to get a list of tuples with 2
 # elements in each tuple: the user screenname and the text of the
 # tweet in descending order based on retweets. Save the resulting
 # list of tuples in a variable called joined_data2.
-cur.execute("SELECT Users.screen_name, Tweets.text FROM Users INNER JOIN Tweets ON Users.user_id = Tweets.user_posted ORDER BY Tweets.retweets")
-joined_data2 = True
+
+
+cur.execute('SELECT screen_name, "text" FROM Tweets INNER JOIN Users on user_posted = user_id ORDER BY retweets DESC')
+joined_data2 = cur.fetchall()
 
 
 ### IMPORTANT: MAKE SURE TO CLOSE YOUR DATABASE CONNECTION AT THE END
@@ -186,6 +201,7 @@ joined_data2 = True
 
 conn.commit()
 cur.close()
+
 ###### TESTS APPEAR BELOW THIS LINE ######
 ###### Note that the tests are necessary to pass, but not sufficient --
 ###### must make sure you've followed the instructions accurately!
