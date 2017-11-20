@@ -159,6 +159,7 @@ for x in fetch:
 # that have been retweeted more than 10 times. Save the result
 # (a list of tuples, or an empty list) in a variable called retweets.
 
+
 cur.execute('SELECT * FROM Tweets WHERE retweets > 10')
 retweets = cur.fetchall()
 
@@ -168,7 +169,7 @@ retweets = cur.fetchall()
 # which should ultimately be a list of strings.
 
 
- #list of descriptions (strings) from users who have favorited more than 500 tweets
+ #list of descriptions (strings) from users who favorited more than 500 tweets
 
 cur.execute('SELECT description FROM Users where num_favs > 500') #selects the column that contains "description" from table users that have favorited over 500 tweets
 fav = cur.fetchall()
